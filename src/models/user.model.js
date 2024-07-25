@@ -1,4 +1,6 @@
 import mongoose, { Schema } from "mongoose";
+import jwt from "jsonwebtoken";
+import bcryptjs from "bcryptjs";
 
 const userSchema = new Schema(
   {
@@ -49,4 +51,19 @@ const userSchema = new Schema(
   }
 );
 
+userSchema.pre("save", async function (next) {
+  if (!this.isModified) return next();
+  bcryptjs.genSalt(10, (err, salt) => {
+    if (err) return next(err);
+    bcryptjs.hash(this.password, salt, (err, hash) => {
+      if (err) return next(err);
+      this.password = hash;
+      next();
+    });
+  });
+});
+
+userSchema.methods.isPasswordCorrect = async function (password) {
+  return await bcryptjs.compare(password, this.password);
+};
 export const User = mongoose.model("User", userSchema);
