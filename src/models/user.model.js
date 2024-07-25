@@ -52,7 +52,7 @@ const userSchema = new Schema(
 );
 
 userSchema.pre("save", async function (next) {
-  if (!this.isModified) return next();
+  if (!this.isModified("password")) return next();
   bcryptjs.genSalt(10, (err, salt) => {
     if (err) return next(err);
     bcryptjs.hash(this.password, salt, (err, hash) => {
