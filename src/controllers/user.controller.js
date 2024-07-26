@@ -90,6 +90,7 @@ const loginUser = asyncHandler(async (req, res) => {
   const loggedInUser = awaitUser
     .findById(user._id)
     .select("-password -refreshToken"); //ye nahi chahiye
+  //options imp for cookies so user cant change them
   const options = {
     httpOnly: true,
     secure: true,
@@ -107,5 +108,22 @@ const loginUser = asyncHandler(async (req, res) => {
     );
 });
 
-const logoutUser = asyncHandler(async (req, res) => {});
-export { registerUser, loginUser };
+const logoutUser = asyncHandler(async (req, res) => {
+  //clear cookies
+  //refresh refreh token
+  await User.findByIdAndUpdate(
+    req.user._id,
+    { refreshToken: undefined },
+    { new: true }
+  );
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+  return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(new ApiResponse(200, {}, "User logged out successfully"));
+});
+export { registerUser, loginUser, logoutUser };
