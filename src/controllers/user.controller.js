@@ -14,14 +14,14 @@ const registerUser = asyncHandler(async (req, res) => {
   //remove pasword and refresh token field from reposne
   //check for user creation
   //return res
-  const { fullname, email, username, password } = req.body;
+  const { fullName, email, username, password } = req.body;
 
   if (
-    [fullname, email, username, password].some((field) => field?.trim() === "")
+    [fullName, email, username, password].some((field) => field?.trim() === "")
   ) {
     throw new ApiError("All fields are required", 400);
   }
-  const existingUser = User.findOne({
+  const existingUser = await User.findOne({
     $or: [{ username }, { email }],
   });
   if (existingUser) {

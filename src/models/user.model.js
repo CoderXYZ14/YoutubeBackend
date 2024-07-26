@@ -10,7 +10,7 @@ const userSchema = new Schema(
       unique: true,
       lowercase: true,
       trim: true,
-      index: true, //optimizes if need to search by username
+      index: true,
     },
     email: {
       type: String,
@@ -26,7 +26,7 @@ const userSchema = new Schema(
       index: true,
     },
     avatar: {
-      type: String, //clodinary id
+      type: String,
       required: true,
     },
     coverImage: {
@@ -53,18 +53,17 @@ const userSchema = new Schema(
 
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  bcryptjs.genSalt(10, (err, salt) => {
-    if (err) return next(err);
-    bcryptjs.hash(this.password, salt, (err, hash) => {
-      if (err) return next(err);
-      this.password = hash;
-      next();
-    });
-  });
+  try {
+    const salt = await bcryptjs.genSalt(10);
+    this.password = await bcryptjs.hash(this.password, salt);
+    next();
+  } catch (err) {
+    next(err);
+  }
 });
 
-userSchema.methods.isPasswordCorrect = async function (password) {
-  return await bcryptjs.compare(password, this.password);
+userSchema.methods.isPasswordCorrect = function (password) {
+  return bcryptjs.compare(password, this.password);
 };
 
 userSchema.methods.generateAccessToken = function () {
@@ -93,4 +92,5 @@ userSchema.methods.generateRefreshToken = function () {
     }
   );
 };
+
 export const User = mongoose.model("User", userSchema);
