@@ -77,7 +77,7 @@ const loginUser = asyncHandler(async (req, res) => {
   //send in cookies
   const { email, username, password } = req.body;
 
-  if (!username || !email)
+  if (!(username || email))
     throw new ApiError(400, "Please provide either username or email");
   const user = await User.findOne({ $or: [{ username }, { email }] });
   if (!user) throw new ApiError(404, "User doesnt exist");
@@ -87,9 +87,9 @@ const loginUser = asyncHandler(async (req, res) => {
   let { accessToken, refreshToken } = await generateAccessAndRefreshToken(
     user._id
   );
-  const loggedInUser = awaitUser
-    .findById(user._id)
-    .select("-password -refreshToken"); //ye nahi chahiye
+  const loggedInUser = await User.findById(user._id).select(
+    "-password -refreshToken"
+  ); //ye nahi chahiye
   //options imp for cookies so user cant change them
   const options = {
     httpOnly: true,
