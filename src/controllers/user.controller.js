@@ -323,6 +323,66 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
       new ApiResponse(200, channel[0], "User channel fetched successfully")
     );
 });
+
+const getWatchHistory = asyncHandler(async (req, res) => {
+  const user = await User.aggregrate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(req.user._id),
+        //cant directly use req.user._id as it is not handled by mongoose by aggregration piplenine so convert it to   object id
+      },
+      //abhi tak user milgaya he
+    },
+    {
+      $lookup: {
+        from: "vidoes",
+        localField: "watchHistory",
+        foreignField: "_id",
+        as: "watchHistory",
+        //abhi tak many documents received and ek sub piple lagani padegi for single
+        pipeline: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "owner",
+              foreignField: "_id",
+              as: "owner",
+              //ab pura user agaya he
+              pipeline: [
+                {
+                  //ye sab owner field me chala jayega
+                  $project: {
+                    fullName: 1,
+                    username: 1,
+                    avatar: 1,
+                  },
+                },
+              ],
+            },
+          },
+          {
+            //can avoid this pipeline by just selectiong first element of arr by extra
+            $addFields: {
+              //us field ko owner hi bolre taki value override hogaye
+              owner: {
+                $first: "$owner",
+              },
+            },
+          },
+        ],
+      },
+    },
+  ]);
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        user[0].watchHistory,
+        "Watch history fetched successfully"
+      )
+    );
+});
 export {
   registerUser,
   loginUser,
@@ -334,4 +394,5 @@ export {
   updateUserAvatar,
   updateUserCoverImage,
   getUserChannelProfile,
+  getWatchHistory,
 };
