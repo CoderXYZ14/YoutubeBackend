@@ -4,6 +4,7 @@ import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 
 const generateAccessAndRefreshToken = async (userId) => {
   try {
@@ -114,7 +115,11 @@ const logoutUser = asyncHandler(async (req, res) => {
   //refresh refreh token
   await User.findByIdAndUpdate(
     req.user._id,
-    { refreshToken: undefined },
+    {
+      $unset: {
+        refreshToken: 1, //this removes the field from document
+      },
+    },
     { new: true }
   );
   const options = {
@@ -131,27 +136,38 @@ const logoutUser = asyncHandler(async (req, res) => {
 const refreshAccessToken = asyncHandler(async (req, res) => {
   const incomingRefreshToken =
     req.cookies.refreshToken || req.body.refreshToken;
+
   if (!incomingRefreshToken) {
-    throw new ApiError(401, "unauthorized request");
+    throw new ApiError(401, "Unauthorized request");
   }
+
   try {
     const decodedToken = jwt.verify(
       incomingRefreshToken,
       process.env.REFRESH_TOKEN_SECRET
     );
-    const user = User.findByIdAndUpdate(decodedToken?._id);
+
+    const user = await User.findById(decodedToken?._id);
+
     if (!user) {
       throw new ApiError(401, "Invalid refresh token");
     }
+
     if (incomingRefreshToken !== user.refreshToken) {
-      throw new ApiError(401, "Refresh token is used");
+      throw new ApiError(401, "Refresh token has been used");
     }
+
+    const { accessToken, newRefreshToken } =
+      await generateAccessAndRefreshToken(user._id);
+
+    user.refreshToken = newRefreshToken;
+    await user.save();
+
     const options = {
       httpOnly: true,
       secure: true,
     };
-    const { accessToken, newRefreshToken } =
-      await generateAccessAndRefreshToken(user._id);
+
     return res
       .status(200)
       .cookie("accessToken", accessToken, options)
@@ -255,46 +271,47 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
 });
 
 const getUserChannelProfile = asyncHandler(async (req, res) => {
-  const { username } = req.params; //as jo channel ki details chahiye uske url me jate he
+  const { username } = req.params; // The username of the channel whose details are needed
+  console.log(username);
+
   if (!username?.trim()) throw new ApiError(400, "Username is missing");
-  //can use User.find({username}) but it is better to use $match field jo sare docs me ek doc find karlega
-  //aggregrate pipeline returns array
+
+  // Aggregate pipeline to fetch the user's channel profile
   const channel = await User.aggregate([
     {
       $match: {
         username: username.trim().toLowerCase(),
-      }, //now u have filtered a doc and u have so u can see his subscibers
+      },
     },
     {
       $lookup: {
-        from: "subscriptions", // as Subscription converts to subscriptions
+        from: "subscriptions", // 'Subscription' collection is converted to 'subscriptions'
         localField: "_id",
         foreignField: "channel",
-        as: "subscribers", //random name
+        as: "subscribers", // Name for the resulting array of subscribers
       },
     },
     {
       $lookup: {
-        from: "subscriptions", // as Subscription converts to subscriptions
+        from: "subscriptions", // 'Subscription' collection is converted to 'subscriptions'
         localField: "_id",
         foreignField: "subscriber",
-        as: "subscribedTo", //random name
+        as: "subscribedTo", // Name for the resulting array of subscribed channels
       },
     },
-    //add both fields
     {
       $addFields: {
         subscribersCount: {
-          $size: "$subscribers", //count of subscribers
+          $size: "$subscribers", // Count of subscribers
         },
         channelsSubscribedToCount: {
-          $size: "$subscribedTo", //count of channels subscribed to
+          $size: "$subscribedTo", // Count of channels subscribed to
         },
         isSubscribed: {
           $cond: {
             if: {
-              $in: [req.user?._id, "$subscribers.subscriber"], //search karko ki req.user ki id he subscribers field me uske subsciber me
-            }, //jo doc aya he usme hu ya nahi
+              $in: [req.user?._id, "$subscribers.subscriber"], // Check if the user is subscribed to this channel
+            },
             then: true,
             else: false,
           },
@@ -303,8 +320,8 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     },
     {
       $project: {
-        //sare cheeze ko nahi duga sirf selected cheeze jo project karna he
-        fullName: 1, //jo jo fields bhejni he uske age 1 laga do
+        // Select only the necessary fields
+        fullName: 1,
         username: 1,
         subscribersCount: 1,
         channelsSubscribedToCount: 1,
@@ -315,8 +332,10 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
       },
     },
   ]);
-  //in our case the returned array would have only 1 value as only one user
-  if (condition?.length) throw new ApiError(404, "Channel not found");
+
+  // Check if the channel was found
+  if (!channel.length) throw new ApiError(404, "Channel not found");
+
   return res
     .status(200)
     .json(
@@ -325,7 +344,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
 });
 
 const getWatchHistory = asyncHandler(async (req, res) => {
-  const user = await User.aggregrate([
+  const user = await User.aggregate([
     {
       $match: {
         _id: new mongoose.Types.ObjectId(req.user._id),
